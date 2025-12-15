@@ -1,0 +1,88 @@
+name: "AI Code Reviewer"
+description: "Analyze PR code changes and send to AI Review API"
+author: "TuanPA"
+inputs:
+  api_url:
+    description: "Full URL of the Review API"
+    required: true
+  api_token:
+    description: "API Token if needed"
+    required: false
+  github_token:
+    description: "Standard GitHub Token for comments"
+    required: true
+  language:
+    description: "Output language (en or vi)"
+    default: "vi"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    # 1. Setup Python (Composite actions can use other actions!)
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+
+    # 2. Fetch base branch for git diff (User repo checked out already)
+    - name: Fetch base branch
+      shell: bash
+      run: git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
+
+    # 3. Run Python Script (Located inside the Action repo, NOT user repo)
+    - name: Generate Review Payload
+      shell: bash
+      env:
+        PYTHONPATH: ${{ github.action_path }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        PR_BODY: ${{ github.event.pull_request.body }}
+        BRANCH_NAME: ${{ github.head_ref }}
+        PR_URL: ${{ github.event.pull_request.html_url }}
+        CREATOR: ${{ github.event.pull_request.user.login }}
+        BASE_REF: ${{ github.base_ref }}
+        HEAD_REF: ${{ github.sha }}
+        REVIEWERS_JSON: ${{ toJson(github.event.pull_request.requested_reviewers) }}
+        OUTPUT_LANG: ${{ inputs.language }}
+        PAYLOAD_OUTPUT_PATH: payload.json
+      run: python ${{ github.action_path }}/scripts/generate_payload.py
+
+    # 4. Call API
+    - name: Send Info to API
+      shell: bash
+      run: |
+        echo "Sending payload to ${{ inputs.api_url }}"
+        RESPONSE=$(curl -s -X POST "${{ inputs.api_url }}" \
+          -H "Content-Type: application/json" \
+          -d @payload.json)
+
+        echo "$RESPONSE" > api_response.json
+
+    # 5. Comment on PR
+    - name: Extract Review and Save
+      shell: bash
+      run: |
+        REVIEW=$(jq -r '.review_text' api_response.json)
+        # Handle cases where review is null/empty
+        if [ "$REVIEW" == "null" ]; then echo "Review generation failed"; exit 1; fi
+        echo "$REVIEW" > review_comment.md
+
+    - name: Comment on Pull Request
+      uses: thollander/actions-comment-pull-request@v2
+      with:
+        filePath: review_comment.md
+        pr_number: ${{ github.event.pull_request.number }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+      continue-on-error: true
+
+    # 6. Create Issue if needed
+    - name: Create GitHub Issue
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        ISSUES=$(jq -r '.issues_text' api_response.json)
+        if [ -n "$ISSUES" ] && [ "$ISSUES" != "null" ] && [ "$ISSUES" != "" ]; then
+          echo "$ISSUES" > issue_body.md
+          gh issue create --title "🚨 Code Review Issues detected" --body-file issue_body.md --repo ${{ github.repository }} || true
+        fi
