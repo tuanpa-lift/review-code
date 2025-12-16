@@ -7,7 +7,7 @@ inputs:
     required: true
   api_url:
     description: "Full URL of the Review API"
-    required: true
+    required: false
   github_token:
     description: "Standard GitHub Token for comments"
     required: true
@@ -51,10 +51,13 @@ runs:
     - name: Send Info to API
       shell: bash
       run: |
-        FIXED_API_URL="https://gibraltar-drama-placing-twenty.trycloudflare.com/api/v1/review-code/"
+        API_URL="${{ inputs.api_url }}"
+        if [ -z "$API_URL" ]; then
+          API_URL="https://api.freedl.blog/api/v1/review-code/"
+        fi
 
         echo "Sending payload to LiftSoft API..."
-        RESPONSE=$(curl -s -X POST "$FIXED_API_URL" \
+        RESPONSE=$(curl -s -X POST "$API_URL" \
           -H "Content-Type: application/json" \
           -H "X-API-Key: ${{ inputs.api_key }}" \
           -d @payload.json)
