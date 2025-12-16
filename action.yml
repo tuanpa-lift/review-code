@@ -15,22 +15,25 @@ inputs:
     description: "Output language (en or vi)"
     default: "vi"
     required: false
+  custom_instructions:
+    description: "Custom instructions for the AI reviewer (e.g. 'Focus on security')"
+    required: false
 
 runs:
   using: "composite"
   steps:
-    # 1. Setup Python (Composite actions can use other actions!)
+    # 1. Setup Python
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: "3.12"
 
-    # 2. Fetch base branch for git diff (User repo checked out already)
+    # 2. Fetch base branch for git diff
     - name: Fetch base branch
       shell: bash
       run: git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
 
-    # 3. Run Python Script (Located inside the Action repo, NOT user repo)
+    # 3. Run Python Script
     - name: Generate Review Payload
       shell: bash
       env:
@@ -44,6 +47,9 @@ runs:
         HEAD_REF: ${{ github.sha }}
         REVIEWERS_JSON: ${{ toJson(github.event.pull_request.requested_reviewers) }}
         OUTPUT_LANG: ${{ inputs.language }}
+        CUSTOM_INSTRUCTIONS: ${{ inputs.custom_instructions }}
+        # Pass GitHub Token to allow script to fetch extra info if needed
+        GH_TOKEN: ${{ inputs.github_token }}
         PAYLOAD_OUTPUT_PATH: payload.json
       run: python ${{ github.action_path }}/scripts/generate_payload.py
 
