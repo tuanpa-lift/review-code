@@ -92,9 +92,13 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        PR_URL: ${{ github.event.pull_request.html_url }}
       run: |
         ISSUES=$(jq -r '.issues_text' api_response.json)
         if [ -n "$ISSUES" ] && [ "$ISSUES" != "null" ] && [ "$ISSUES" != "" ]; then
-          echo "$ISSUES" > issue_body.md
-          gh issue create --title "🚨 Code Review Issues detected" --body-file issue_body.md --repo ${{ github.repository }} || true
+          echo "Review caused by PR: $PR_URL" > issue_body.md
+          echo "" >> issue_body.md
+          echo "$ISSUES" >> issue_body.md
+          gh issue create --title "🚨 Code Review Issues: $PR_TITLE" --body-file issue_body.md --repo ${{ github.repository }} || true
         fi
