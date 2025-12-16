@@ -46,7 +46,7 @@ runs:
         BASE_REF: ${{ github.base_ref }}
         HEAD_REF: ${{ github.sha }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
-        COMMIT_SHA: ${{ github.sha }}
+        COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
         REVIEWERS_JSON: ${{ toJson(github.event.pull_request.requested_reviewers) }}
         OUTPUT_LANG: ${{ inputs.language }}
         CUSTOM_INSTRUCTIONS: ${{ inputs.custom_instructions }}
@@ -65,12 +65,14 @@ runs:
         fi
 
         echo "Sending payload to LiftSoft API..."
-        RESPONSE=$(curl -s -X POST "$API_URL" \
+        HTTP_CODE=$(curl -s -o api_response.json -w "%{http_code}" -X POST "$API_URL" \
           -H "Content-Type: application/json" \
           -H "X-API-Key: ${{ inputs.api_key }}" \
           -d @payload.json)
 
-        echo "$RESPONSE" > api_response.json
+        echo "API Response Status Code: $HTTP_CODE"
+        echo "API Response Body:"
+        cat api_response.json
 
     # 5. Comment on PR
     - name: Extract Review and Save
