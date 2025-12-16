@@ -2,12 +2,12 @@ name: "AI Code Reviewer"
 description: "Analyze PR code changes and send to AI Review API"
 author: "TuanPA"
 inputs:
+  api_key:
+    description: "Project API Token provided by LiftSoft"
+    required: true
   api_url:
     description: "Full URL of the Review API"
     required: true
-  api_token:
-    description: "API Token if needed"
-    required: false
   github_token:
     description: "Standard GitHub Token for comments"
     required: true
@@ -51,9 +51,12 @@ runs:
     - name: Send Info to API
       shell: bash
       run: |
-        echo "Sending payload to ${{ inputs.api_url }}"
-        RESPONSE=$(curl -s -X POST "${{ inputs.api_url }}" \
+        FIXED_API_URL="https://gibraltar-drama-placing-twenty.trycloudflare.com/api/v1/review-code/"
+
+        echo "Sending payload to LiftSoft API..."
+        RESPONSE=$(curl -s -X POST "$FIXED_API_URL" \
           -H "Content-Type: application/json" \
+          -H "X-API-Key: ${{ inputs.api_key }}" \
           -d @payload.json)
 
         echo "$RESPONSE" > api_response.json
