@@ -161,6 +161,8 @@ def main():
 
     payload = {
         "pr_title": os.environ.get('PR_TITLE'),
+        "pr_number": os.environ.get('PR_NUMBER'),
+        "commit_sha": os.environ.get('COMMIT_SHA'),
         "pr_description": pr_body,
         "branch_name": os.environ.get('BRANCH_NAME'),
         "pr_url": pr_url,

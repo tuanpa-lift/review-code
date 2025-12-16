@@ -45,6 +45,8 @@ runs:
         CREATOR: ${{ github.event.pull_request.user.login }}
         BASE_REF: ${{ github.base_ref }}
         HEAD_REF: ${{ github.sha }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        COMMIT_SHA: ${{ github.sha }}
         REVIEWERS_JSON: ${{ toJson(github.event.pull_request.requested_reviewers) }}
         OUTPUT_LANG: ${{ inputs.language }}
         CUSTOM_INSTRUCTIONS: ${{ inputs.custom_instructions }}
