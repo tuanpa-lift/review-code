@@ -23,7 +23,7 @@ fi
 
 # Define API URL
 if [ -z "$API_URL" ]; then
-  API_URL="https://api.freedl.blog/api/v1/review-code/"
+  API_URL="https://jurisdiction-generates-environmental-nails.trycloudflare.com/api/v1/review-code/"
 fi
 
 # ==============================================================================
