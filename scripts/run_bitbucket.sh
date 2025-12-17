@@ -16,8 +16,15 @@ if [ -z "$LIFT_API_KEY" ]; then
   exit 1
 fi
 
-if [ -z "$BITBUCKET_USERNAME" ] || [ -z "$BITBUCKET_APP_PASSWORD" ]; then
-  echo "Error: BITBUCKET_USERNAME and BITBUCKET_APP_PASSWORD are required to fetch PR details and comment."
+if [ -n "$BITBUCKET_ACCESS_TOKEN" ]; then
+  AUTH_HEADER="Authorization: Bearer $BITBUCKET_ACCESS_TOKEN"
+elif [ -n "$BITBUCKET_USERNAME" ] && [ -n "$BITBUCKET_APP_PASSWORD" ]; then
+  # Fallback to App Password (Basic Auth) - construct header manually or use curl -u
+  # We will use a variable for curl arguments to keep it clean
+  AUTH_USER="$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD"
+else
+  echo "Error: Missing authentication credentials."
+  echo "Please set BITBUCKET_ACCESS_TOKEN (Recommended) OR BITBUCKET_USERNAME + BITBUCKET_APP_PASSWORD in Repository Variables."
   exit 1
 fi
 
@@ -35,8 +42,17 @@ echo "🔧 Setting up environment..."
 REPO_FULL_SLUG="${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}"
 
 echo "📥 Fetching Pull Request #$BITBUCKET_PR_ID Details from Bitbucket API..."
-PR_RESPONSE=$(curl -u "${BITBUCKET_USERNAME}:${BITBUCKET_APP_PASSWORD}" \
-  -s "https://api.bitbucket.org/2.0/repositories/${REPO_FULL_SLUG}/pullrequests/${BITBUCKET_PR_ID}")
+
+# Helper function to run curl with correct auth
+curl_api() {
+  if [ -n "$BITBUCKET_ACCESS_TOKEN" ]; then
+    curl -s -H "Authorization: Bearer $BITBUCKET_ACCESS_TOKEN" "$@"
+  else
+    curl -s -u "$AUTH_USER" "$@"
+  fi
+}
+
+PR_RESPONSE=$(curl_api "https://api.bitbucket.org/2.0/repositories/${REPO_FULL_SLUG}/pullrequests/${BITBUCKET_PR_ID}")
 
 # Extract fields using Python (avoiding extra jq dependency if possible, but jq is safer)
 # We will assume python3 is available since we need it for the generator anyway.
@@ -122,7 +138,7 @@ data = {'content': {'raw': full_comment}}
 print(json.dumps(data))
 " > comment_payload.json
 
-  curl -u "${BITBUCKET_USERNAME}:${BITBUCKET_APP_PASSWORD}" \
+  curl_api \
     -X POST \
     -H "Content-Type: application/json" \
     -d @comment_payload.json \
