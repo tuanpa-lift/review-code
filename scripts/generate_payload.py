@@ -171,8 +171,6 @@ def main():
         "reviewers": reviewers,
         "files": files,
         "commit_messages": commit_messages,
-
-        # New Context Fields
         "linked_issues": linked_issues,
         "repository_structure": repo_structure,
         "dependencies": dependencies,

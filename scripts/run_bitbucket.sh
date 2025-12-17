@@ -11,8 +11,8 @@ if [ -z "$BITBUCKET_PR_ID" ]; then
   exit 0 # Exit gracefully if not a PR to avoid failing build
 fi
 
-if [ -z "$LIFT_API_KEY" ]; then
-  echo "Error: LIFT_API_KEY is missing."
+if [ -z "$LIFT_AI_API_KEY" ]; then
+  echo "Error: LIFT_AI_API_KEY is missing."
   exit 1
 fi
 
@@ -30,7 +30,7 @@ fi
 
 # Define API URL
 if [ -z "$API_URL" ]; then
-  API_URL="https://jurisdiction-generates-environmental-nails.trycloudflare.com/api/v1/review-code/"
+  API_URL="https://api.freedl.blog/api/v1/review-code/"
 fi
 
 # ==============================================================================
@@ -100,7 +100,7 @@ python3 "$PYTHON_SCRIPT"
 echo "🚀 Sending payload to LiftSoft API..."
 HTTP_CODE=$(curl -s -o api_response.json -w "%{http_code}" -X POST "$API_URL" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: $LIFT_API_KEY" \
+  -H "X-API-Key: $LIFT_AI_API_KEY" \
   -d @payload.json)
 
 echo "API Response Status: $HTTP_CODE"
