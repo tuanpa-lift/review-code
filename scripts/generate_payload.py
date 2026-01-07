@@ -115,8 +115,18 @@ def main():
     pr_url = os.environ.get('PR_URL', '')
 
     # 1. Lấy danh sách file thay đổi
-    print(f"Calculating diff between {base_ref} and {head_ref}...")
-    output = run_command(['git', 'diff', '--name-status', base_ref, head_ref])
+    # Tìm merge-base (điểm phân nhánh chung) để chỉ lấy các thay đổi trong PR này
+    print(f"Finding merge-base between {base_ref} and {head_ref}...")
+    merge_base = run_command(['git', 'merge-base', base_ref, head_ref]).strip()
+    
+    if not merge_base:
+        print(f"Warning: Could not find merge-base, falling back to direct diff")
+        merge_base = base_ref
+    else:
+        print(f"Merge-base: {merge_base}")
+    
+    print(f"Calculating diff between {merge_base} and {head_ref}...")
+    output = run_command(['git', 'diff', '--name-status', merge_base, head_ref])
 
     files = []
     for line in output.strip().split('\n'):
@@ -130,9 +140,9 @@ def main():
                       'D': 'deleted', 'R': 'renamed'}
         status = status_map.get(status_code, 'modified')
 
-        # Get patch
+        # Get patch (using merge_base for consistency)
         patch = run_command(
-            ['git', 'diff', '-U10', base_ref, head_ref, '--', filename])
+            ['git', 'diff', '-U10', merge_base, head_ref, '--', filename])
 
         files.append({
             "filename": filename,
@@ -140,9 +150,9 @@ def main():
             "patch": patch
         })
 
-    # 2. Get commit messages
+    # 2. Get commit messages (using merge_base for accuracy)
     log_output = run_command(
-        ['git', 'log', '--format=%s', f"{base_ref}..{head_ref}"])
+        ['git', 'log', '--format=%s', f"{merge_base}..{head_ref}"])
     commit_messages = [msg for msg in log_output.strip().split('\n') if msg]
 
     # 3. Enhanced Context Collection (CodeRabbit-style features)
