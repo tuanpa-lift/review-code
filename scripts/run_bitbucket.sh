@@ -25,8 +25,7 @@ else
 fi
 
 if [ -z "$API_URL" ]; then
-  # API_URL="https://api.freedl.blog/api/v1/review-code/"
-  API_URL="https://drain-cosmetic-highway-missing.trycloudflare.com/api/v1/review-code/"
+  API_URL="https://api.freedl.blog/api/v1/review-code/"
 fi
 
 REPO_FULL_SLUG="${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}"
