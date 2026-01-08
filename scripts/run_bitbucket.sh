@@ -4,11 +4,9 @@ set -e
 # ==============================================================================
 # SCRIPT CONFIGURATION
 # ==============================================================================
-# Ensure we have necessary environment variables
 if [ -z "$BITBUCKET_PR_ID" ]; then
-  echo "Error: This script must be run within a Bitbucket Pipeline on a Pull Request."
-  echo "Make sure the pipeline is triggered by a PR or 'pull-requests' specific trigger."
-  exit 0 # Exit gracefully if not a PR to avoid failing build
+  echo "Error: Not a PR context."
+  exit 0
 fi
 
 if [ -z "$LIFT_AI_API_KEY" ]; then
@@ -16,34 +14,24 @@ if [ -z "$LIFT_AI_API_KEY" ]; then
   exit 1
 fi
 
+# Auth logic (như cũ)
 if [ -n "$BITBUCKET_ACCESS_TOKEN" ]; then
   AUTH_HEADER="Authorization: Bearer $BITBUCKET_ACCESS_TOKEN"
 elif [ -n "$BITBUCKET_USERNAME" ] && [ -n "$BITBUCKET_APP_PASSWORD" ]; then
-  # Fallback to App Password (Basic Auth) - construct header manually or use curl -u
-  # We will use a variable for curl arguments to keep it clean
   AUTH_USER="$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD"
 else
   echo "Error: Missing authentication credentials."
-  echo "Please set BITBUCKET_ACCESS_TOKEN (Recommended) OR BITBUCKET_USERNAME + BITBUCKET_APP_PASSWORD in Repository Variables."
   exit 1
 fi
 
-# Define API URL
 if [ -z "$API_URL" ]; then
+  # API_URL="https://api.freedl.blog/api/v1/review-code/" # Local or Prod URL
   API_URL="https://api.freedl.blog/api/v1/review-code/"
 fi
 
-# ==============================================================================
-# 1. SETUP & FETCH PR DETAILS
-# ==============================================================================
-echo "🔧 Setting up environment..."
-
-# Workspace/Repo derived from predefined vars
 REPO_FULL_SLUG="${BITBUCKET_WORKSPACE}/${BITBUCKET_REPO_SLUG}"
 
-echo "📥 Fetching Pull Request #$BITBUCKET_PR_ID Details from Bitbucket API..."
-
-# Helper function to run curl with correct auth
+# Helper function
 curl_api() {
   if [ -n "$BITBUCKET_ACCESS_TOKEN" ]; then
     curl -s -H "Authorization: Bearer $BITBUCKET_ACCESS_TOKEN" "$@"
@@ -93,10 +81,12 @@ PYTHON_SCRIPT="$SCRIPT_DIR/generate_payload.py"
 
 python3 "$PYTHON_SCRIPT"
 
+
 # ==============================================================================
 # 4. SEND TO API
 # ==============================================================================
 echo "🚀 Sending payload to LiftSoft API..."
+
 HTTP_CODE=$(curl -s -o api_response.json -w "%{http_code}" -X POST "$API_URL" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $LIFT_AI_API_KEY" \
@@ -111,32 +101,47 @@ if [ "$HTTP_CODE" -ne 200 ]; then
 fi
 
 # ==============================================================================
-# 5. COMMENT ON PR
+# 5. COMMENT ON PR (SAFE VERSION)
 # ==============================================================================
-REVIEW_TEXT=$(cat api_response.json | python3 -c "import sys, json; print(json.load(sys.stdin).get('review_text', ''))")
-ISSUES_TEXT=$(cat api_response.json | python3 -c "import sys, json; print(json.load(sys.stdin).get('issues_text', ''))")
+echo "💬 Preparing comment..."
 
-if [ -z "$REVIEW_TEXT" ] || [ "$REVIEW_TEXT" == "None" ]; then
-  echo "⚠️ No review text generated."
+# SỬ DỤNG PYTHON ĐỂ ĐỌC FILE JSON TRỰC TIẾP
+# Cách này an toàn tuyệt đối với mọi ký tự đặc biệt, unicode, code, quotes...
+python3 -c "
+import json
+import sys
+try:
+    with open('api_response.json', 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        
+    review = data.get('review_text', '')
+    issues = data.get('issues_text', '')
+    if not review or review == 'None':
+        print('NO_CONTENT')
+        sys.exit(0)
+    # Ghép nội dung
+    full_comment = review
+    if issues and issues != 'None' and issues.strip():
+        full_comment += '\n\n' + issues
+    # Tạo payload cho Bitbucket
+    payload = {'content': {'raw': full_comment}}
+    
+    with open('comment_payload.json', 'w', encoding='utf-8') as out:
+        json.dump(payload, out, ensure_ascii=False)
+        
+except Exception as e:
+    print(f'Error processing response: {e}')
+    sys.exit(1)
+" > processing_output.txt
+
+# Kiểm tra output từ python script
+PROCESS_RESULT=$(cat processing_output.txt)
+
+if [ "$PROCESS_RESULT" == "NO_CONTENT" ]; then
+  echo "⚠️ No review text generated. Skipping comment."
 else
   echo "💬 Posting review comment to Bitbucket..."
   
-  # Escape content for JSON is tricky in bash. Using python to construct the json payload safely.
-  python3 -c "
-import json
-import os
-
-review = '''$REVIEW_TEXT'''
-issues = '''$ISSUES_TEXT'''
-
-full_comment = review
-if issues and issues != 'None':
-    full_comment += '\n\n' + issues
-
-data = {'content': {'raw': full_comment}}
-print(json.dumps(data))
-" > comment_payload.json
-
   curl_api \
     -X POST \
     -H "Content-Type: application/json" \

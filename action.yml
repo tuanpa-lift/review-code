@@ -50,9 +50,9 @@ runs:
         REVIEWERS_JSON: ${{ toJson(github.event.pull_request.requested_reviewers) }}
         OUTPUT_LANG: ${{ inputs.language }}
         CUSTOM_INSTRUCTIONS: ${{ inputs.custom_instructions }}
-        # Pass GitHub Token to allow script to fetch PR data via API
         GITHUB_TOKEN: ${{ inputs.github_token }}
         PAYLOAD_OUTPUT_PATH: payload.json
+      # Ensure generate_payload.py exists in your action's scripts/ folder
       run: python ${{ github.action_path }}/scripts/generate_payload.py
 
     # 4. Call API
@@ -65,23 +65,45 @@ runs:
         fi
 
         echo "Sending payload to LiftSoft API..."
+        # Capture HTTP code and content separately for better error handling
         HTTP_CODE=$(curl -s -o api_response.json -w "%{http_code}" -X POST "$API_URL" \
           -H "Content-Type: application/json" \
           -H "X-API-Key: ${{ inputs.api_key }}" \
           -d @payload.json)
 
         echo "API Response Status Code: $HTTP_CODE"
-        echo "API Response Body:"
-        cat api_response.json
 
-    # 5. Comment on PR
+        if [ "$HTTP_CODE" -ne 200 ]; then
+          echo "Error: API returned status $HTTP_CODE"
+          cat api_response.json
+          exit 1
+        fi
+
+    # 5. Comment on PR (Safe Python Extraction)
     - name: Extract Review and Save
       shell: bash
       run: |
-        REVIEW=$(jq -r '.review_text' api_response.json)
-        # Handle cases where review is null/empty
-        if [ "$REVIEW" == "null" ]; then echo "Review generation failed"; exit 1; fi
-        echo "$REVIEW" > review_comment.md
+        python3 -c "
+        import json
+        import sys
+
+        try:
+            with open('api_response.json', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            review = data.get('review_text', '')
+            # Check for None explicitly or empty string
+            if not review or review == 'None' or not review.strip():
+                print('Review generation failed or empty.')
+                sys.exit(1)
+            
+            # Write directly to file to avoid shell expansion issues
+            with open('review_comment.md', 'w', encoding='utf-8') as f:
+                f.write(review)
+        except Exception as e:
+            print(f'Error extracting review: {e}')
+            sys.exit(1)
+        "
 
     - name: Comment on Pull Request
       uses: thollander/actions-comment-pull-request@v2
@@ -91,7 +113,7 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github_token }}
       continue-on-error: true
 
-    # 6. Create Issue if needed
+    # 6. Create Issue if needed (Safe Python Extraction)
     - name: Create GitHub Issue
       shell: bash
       env:
@@ -99,10 +121,38 @@ runs:
         PR_TITLE: ${{ github.event.pull_request.title }}
         PR_URL: ${{ github.event.pull_request.html_url }}
       run: |
-        ISSUES=$(jq -r '.issues_text' api_response.json)
-        if [ -n "$ISSUES" ] && [ "$ISSUES" != "null" ] && [ "$ISSUES" != "" ]; then
-          echo "Review caused by PR: $PR_URL" > issue_body.md
-          echo "" >> issue_body.md
-          echo "$ISSUES" >> issue_body.md
+        # Use Python to check and prepare issue body safely
+        python3 -c "
+        import json
+        import os
+        import sys
+
+        try:
+            with open('api_response.json', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            issues = data.get('issues_text', '')
+            
+            # Only create issue file if there are actual issues
+            if issues and issues != 'None' and issues.strip():
+                pr_url = os.environ.get('PR_URL', '')
+                with open('issue_body.md', 'w', encoding='utf-8') as f:
+                    f.write(f'Review caused by PR: {pr_url}\n\n')
+                    f.write(issues)
+                print('ISSUES_FOUND')
+            else:
+                print('NO_ISSUES')
+        except Exception as e:
+            print(f'Error extracting issues: {e}')
+            sys.exit(1)
+        " > issue_check_status.txt
+        
+        STATUS=$(cat issue_check_status.txt)
+        
+        if [ "$STATUS" == "ISSUES_FOUND" ]; then
+          echo "Creating GitHub Issue..."
           gh issue create --title "🚨 Code Review Issues: $PR_TITLE" --body-file issue_body.md --repo ${{ github.repository }} || true
+        else
+          echo "No issues to report."
         fi
+        
