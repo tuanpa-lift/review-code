@@ -369,7 +369,7 @@ def main():
         "branch_name": os.environ.get('BRANCH_NAME'),
         "pr_url": pr_url,
         "creator": os.environ.get('CREATOR'),
-        "output_lang": os.environ.get('OUTPUT_LANG', 'en'),
+        "output_lang": os.environ.get('OUTPUT_LANG', 'vi'),
         "reviewers": reviewers,
         "files": files,
         "commit_messages": commit_messages,
