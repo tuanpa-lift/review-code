@@ -76,11 +76,10 @@ echo "  - Title: $PR_TITLE"
 echo "  - Branch: $HEAD_REF -> $BASE_REF"
 
 # ==============================================================================
-# 2. PREPARE GIT
+# 2. INSTALL DEPENDENCIES
 # ==============================================================================
-# Bitbucket does a shallow clone/checkout. We need to fetch the target branch to diff.
-echo "🔄 Fetching base branch ($BASE_REF) for diff..."
-git fetch origin ${BASE_REF}:${BASE_REF} --depth=100 || git fetch origin ${BASE_REF}
+echo "📦 Installing Python dependencies..."
+pip3 install requests --quiet
 
 # ==============================================================================
 # 3. GENERATE PAYLOAD
